@@ -4,10 +4,10 @@ import os
 
 # READ ---------- READ
 
-csv_in = 'PT 2-1.csv'
-csv_out = 'flashcards.csv'
-en_folder = 'EN'        
-pt_folder = 'PT'
+csv_in = 'PT 2-6.csv'
+csv_out = 'words.csv'
+en_folder = r'C:\Users\Mac\AppData\Roaming\Anki2\Mac\collection.media'
+pt_folder = r'C:\Users\Mac\AppData\Roaming\Anki2\Mac\collection.media'
 
 filter_in = []
 filter_out = []
@@ -20,7 +20,7 @@ with open(csv_in, mode='r', encoding='utf-8') as file:
         pt_word = row[1].strip()
 
         # Skip capitalized words and add them to filter_out
-        if en_word.istitle() or pt_word.istitle():
+        if en_word.istitle() and pt_word.istitle():
             filter_out.append((en_word, pt_word))
         elif en_word and pt_word:  # Check if neither word is empty
             filter_in.append((en_word, pt_word))
@@ -69,10 +69,8 @@ with open(csv_out, mode='w', newline='', encoding='utf-8') as file:
     writer = csv.writer(file)
 
     for en_word, pt_word in gTTS_list:
-        mp3_name_en = f"{en_word}_en.mp3"
-        mp3_name_pt = f"{pt_word}_pt.mp3"
-        front = f"{en_word}<br>[sound:{mp3_name_en}]"
-        back = f"{pt_word}<br>[sound:{mp3_name_pt}]"
+        front = f"{en_word}<br>[sound:{f"{en_word}_en.mp3"}]"
+        back = f"{pt_word}<br>[sound:{f"{pt_word}_pt.mp3"}]"
         
         writer.writerow([front, back])
 

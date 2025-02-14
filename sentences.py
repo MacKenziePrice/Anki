@@ -1,6 +1,7 @@
 import csv
 import openai
 import os
+import random
 import time
 from gtts import gTTS
 
@@ -38,13 +39,15 @@ def make_audio(text, file, lang="pt"):
     tts = gTTS(text, lang=lang)
     tts.save(file)
 
-with open(csv_in, "r", encoding="utf-8") as infile, open(csv_out, "a", encoding="utf-8", newline="") as outfile:
-    reader = csv.reader(infile)
+with open(csv_in, "r", encoding="utf-8") as infile, open(csv_out, "w", encoding="utf-8", newline="") as outfile:
+    reader = list(csv.reader(infile))
     writer = csv.writer(outfile)
 
-    word_count = 0
+    random_words = random.sample(reader, min(50, len(reader)))
+
+    # word_count = 0
     
-    for row in reader:
+    for row in random_words:
         word_en = row[0].strip()
         word_pt = row[1].strip()
         
@@ -69,9 +72,9 @@ with open(csv_in, "r", encoding="utf-8") as infile, open(csv_out, "a", encoding=
 
         writer.writerow([front, back])
 
-        word_count += 1
-        if word_count >= 2:  # Limit processing to X words
-            break
+        # word_count += 1
+        # if word_count >= 50:  # Limit processing to X words
+        #     break
 
         # Avoid rate limits
         time.sleep(1)

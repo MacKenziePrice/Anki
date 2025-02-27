@@ -7,16 +7,19 @@ from gtts import gTTS
 
 csv_in = 'filtered.csv'
 csv_out = 'sentences.csv'
+csv_random = 'random.csv'
 en_folder = 'EN_'
 pt_folder = 'PT_'
 
 client = openai.OpenAI()
 
 def make_sentences(word):
-    prompt = f"""Generate a simple sentence in English using the word '{word}'. 
+    prompt = f"""Generate a simple sentence in English using the word '{word}'.
     The sentence should be simple and suitable for an English speaker learning basic Portuguese, and it must end with a period.
     After that, provide the Portuguese translation of the sentence, and ensure it also ends with a period.
     Output format: The English sentence first, followed by the Portuguese translation.
+    Omit anything within parenthesis.
+    When an English word is prefixed with 'to' it is a verb, example 'to cook'. Process these verbs in a variety of tenses.
     Example output:
     The cat is sleeping.
     O gato está dormindo."""
@@ -43,9 +46,9 @@ with open(csv_in, "r", encoding="utf-8") as infile, open(csv_out, "w", encoding=
     reader = list(csv.reader(infile))
     writer = csv.writer(outfile)
 
-    random_words = random.sample(reader, min(50, len(reader)))
+    random_words = random.sample(reader, min(25, len(reader)))
 
-    # word_count = 0
+    word_count = 0
     
     for row in random_words:
         word_en = row[0].strip()
@@ -72,9 +75,9 @@ with open(csv_in, "r", encoding="utf-8") as infile, open(csv_out, "w", encoding=
 
         writer.writerow([front, back])
 
-        # word_count += 1
-        # if word_count >= 50:  # Limit processing to X words
-        #     break
+        word_count += 1
+        if word_count >= 50:  # Limit processing to X words
+            break
 
         # Avoid rate limits
         time.sleep(1)

@@ -4,7 +4,7 @@ import os
 
 # READ ---------- READ
 
-csv_in = 'PT 2-6.csv'
+csv_in = 'PT 2-25.csv'
 csv_out = 'words.csv'
 en_folder = r'C:\Users\Mac\AppData\Roaming\Anki2\Mac\collection.media'
 pt_folder = r'C:\Users\Mac\AppData\Roaming\Anki2\Mac\collection.media'

@@ -2,27 +2,43 @@ import csv
 import openai
 import os
 import random
+import re
 import time
 from gtts import gTTS
 
 csv_in = 'filtered.csv'
 csv_out = 'sentences.csv'
-csv_random = 'random.csv'
 en_folder = 'EN_'
 pt_folder = 'PT_'
 
 client = openai.OpenAI()
 
+limits = client.rate_limits()
+print(limits)
+
+def clean_word(word):
+    # Remove parenthesis 
+    word_en_no_parens = re.sub(r'\([^)]*\)', '', word)
+
+    # Remove 'to ' prefix from verbs.
+    if word_en_no_parens.lower().startswith('to '):
+        return word_en_no_parens[3:]  # Remove the first 3 characters ('to ')
+    return word_en_no_parens
+
+def make_audio(text, file, lang="pt"):
+    tts = gTTS(text, lang=lang)
+    tts.save(file)
+
 def make_sentences(word):
-    prompt = f"""Generate a simple sentence in English using the word '{word}'.
+    prompt = f"""Generate a simple sentence using the word {word}.
     The sentence should be simple and suitable for an English speaker learning basic Portuguese, and it must end with a period.
-    After that, provide the Portuguese translation of the sentence, and ensure it also ends with a period.
+    Next, provide the Portuguese translation of the sentence, and ensure it also ends with a period.
     Output format: The English sentence first, followed by the Portuguese translation.
     Omit anything within parenthesis.
-    When an English word is prefixed with 'to' it is a verb, example 'to cook'. Process these verbs in a variety of tenses.
+    Please process verbs in a variety of sentences. Some future, past, and present. Please try to be creative, and avoid repeating yourself.
     Example output:
-    The cat is sleeping.
-    O gato está dormindo."""
+    I really like Brazil.
+    Eu gosto muito do Brasil."""
     
     response = client.chat.completions.create(
         model="gpt-3.5-turbo-1106",
@@ -38,10 +54,6 @@ def make_sentences(word):
     else:
         return None, None
 
-def make_audio(text, file, lang="pt"):
-    tts = gTTS(text, lang=lang)
-    tts.save(file)
-
 with open(csv_in, "r", encoding="utf-8") as infile, open(csv_out, "w", encoding="utf-8", newline="") as outfile:
     reader = list(csv.reader(infile))
     writer = csv.writer(outfile)
@@ -53,18 +65,20 @@ with open(csv_in, "r", encoding="utf-8") as infile, open(csv_out, "w", encoding=
     for row in random_words:
         word_en = row[0].strip()
         word_pt = row[1].strip()
+
+        word_en_clean = clean_word(word_en)
+        print(word_en_clean)
         
-        en_sentence, pt_sentence = make_sentences(word_en)
+        en_sentence, pt_sentence = make_sentences(word_en_clean)
 
         en_audio = os.path.join(en_folder, f"{word_en}__en.mp3")
         pt_audio = os.path.join(pt_folder, f"{word_pt}__pt.mp3")
 
-        print(word_en)
         print(f"Making EN audio: '{en_sentence}' -> {en_audio}")
         print(f"Making PT audio: '{pt_sentence}' -> {pt_audio}")
 
         if not en_sentence or not pt_sentence:
-            print(f"Skip {word_en}")
+            print(f"Skip {word_en_clean}")
             continue
     
         make_audio(en_sentence, en_audio, lang="en")
@@ -76,11 +90,11 @@ with open(csv_in, "r", encoding="utf-8") as infile, open(csv_out, "w", encoding=
         writer.writerow([front, back])
 
         word_count += 1
-        if word_count >= 50:  # Limit processing to X words
+        if word_count >= 1:  # Limit processing to X words
             break
 
         # Avoid rate limits
-        time.sleep(1)
+        time.sleep(2)
 
 
 

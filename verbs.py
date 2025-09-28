@@ -10,8 +10,8 @@ config = {
     'api_client': openai.OpenAI(),
     'base_folder': 'Verbs',
     'input_csv': 'filtered.csv',
-    'batch_size': 2,
-    'max_batches': 10,
+    'batch_size': 10,
+    'max_batches': 100,
     'tenses': {
         'present': {'folder': 'Present', 'csv': 'present.csv'},
         'past': {'folder': 'Past', 'csv': 'past.csv'},
@@ -62,9 +62,9 @@ def fetch_conjugations(pt_verbs_batch):
     print(f"Sending {len(pt_verbs_batch)} verbs to the API: {joined_verbs}")
     try:
         response = config['api_client'].chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=4096
+            model = "gpt-4o",
+            messages = [{"role": "user", "content": prompt}],
+            max_tokens = 4096
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -100,8 +100,22 @@ def parse_conjugations(raw_data):
     
     return parsed_verbs
 
+def get_existing_verbs(file):
+    existing_verbs = set()
+    try:
+        with open(file, mode='r', encoding='utf-8') as infile:
+            reader = csv.reader(infile)
+            for row in reader:
+                if len(row) >= 2:
+                    match = re.search(r'<b>(.*?)</b>', row[1]) # Find the verb within the <b>...</b> tags on the back of the card
+                    if match:
+                        existing_verbs.add(match.group(1).lower())
+    except FileNotFoundError:
+        print("Output file not found. Starting from scratch.")
+    return existing_verbs
+
 def generate_audio(text, output_path):
-    if not text or not text.strip():
+    if not text or not text.strip(): # Skip if all_conjugations is empty
         print(f"Skipping audio generation for {output_path} due to empty input.")
         return
     try:
@@ -110,12 +124,23 @@ def generate_audio(text, output_path):
         print(f"Error generating audio for {output_path}: {e}")
 
 def main():
-    verb_pairs = filter_verbs(config['input_csv']) # Read 'filtered.csv' and make a list of verb pairs
-    if not verb_pairs:
-        return # Stop if no pairs were found
+    existing_verbs = get_existing_verbs(config['tenses']['present']['csv']) # Find existing verbs
+    print(f"Found {len(existing_verbs)} existing verbs in the output files.")
 
+    verb_pairs = filter_verbs(config['input_csv']) # Read 'filtered.csv' and make a list of verb pairs
+
+    # Create a new list with ONLY the new verbs
+    new_verb_pairs = [ 
+        (en, pt) for en, pt in verb_pairs if pt.lower() not in existing_verbs
+    ]
+
+    if not new_verb_pairs:
+        print("No new verbs to process. Exiting.")
+        return # Stop if there's nothing new to add
+    
+    print(f"Processing {len(new_verb_pairs)} new verbs.")
     all_conjugations = {} # Define empty dictionary for saving results later
-    pt_verbs = [pt for _, pt in verb_pairs] # Make a simple list of only Portuguese verbs
+    pt_verbs = [pt for _, pt in new_verb_pairs] # Make a simple list of only Portuguese verbs
     
     for i in range(0, len(pt_verbs), config['batch_size']): # Loop through the Portuguese verbs in batches
         batch_num = (i // config['batch_size']) + 1
@@ -131,14 +156,13 @@ def main():
         print(f"Successfully parsed {len(parsed_data)} verbs from batch.")
         time.sleep(2) # Add a pause to avoid API limits
     
-    print("\nGenerating Anki cards and audio files...")
-    # Create a dictionary for each tense
-    writers = {
-        tense: csv.writer(open(details['csv'], 'w', newline='', encoding='utf-8'))
+    print(f"Appending new Anki cards and audio files...")
+    writers = { # Create a dictionary for each tense
+        tense: csv.writer(open(details['csv'], 'a', newline='', encoding='utf-8'))
         for tense, details in config['tenses'].items()
     }
 
-    for en_verb, pt_verb in verb_pairs: # Loop through the original verb pairs
+    for en_verb, pt_verb in new_verb_pairs: # Loop through the new verb pairs
         if pt_verb.lower() in all_conjugations:
             en_verb_clean = re.sub(r'\s*\(.*\)\s*', '', en_verb).strip() # Clean the English infinitive for gTTS by removing text within parenthesis
             
@@ -149,12 +173,12 @@ def main():
                 audio_file = f"{pt_verb}_{tense}_verb.mp3" # Uniquely name each file with the correct verb and tense
                 audio_path = os.path.join(tense_folder, audio_file) # Determine the correct folder for each audio file
                 generate_audio(data['gTTS'], audio_path) # Call generate_audio()
-                
-                front = f"{en_verb} [sound:{en_verb_clean}_en.mp3]" # Define front of Anki card
-                back = f"<b>{pt_verb}</b><br>{data['html']}[sound:{audio_file}]" # Define back of Anki card
+
+                front = f"{en_verb}<br>[sound:{en_verb_clean}_en.mp3]"
+                back  = f"<b>{pt_verb}</b><br>{data['html']}<br>[sound:{audio_file}]"
                 writers[tense].writerow([front, back]) # Write front and back for each tense
     
-    print(f"\nSuccess! Wrote cards to {', '.join(d['csv'] for d in config['tenses'].values())}.") # Note: File handles are left open until the script exits. For more robust applications, use a 'with' block.
+    print(f"\nSuccess! Appended new cards to {', '.join(d['csv'] for d in config['tenses'].values())}.") # Note: File handles are left open until the script exits. For more robust applications, use a 'with' block.
 
 if __name__ == "__main__":
     main()

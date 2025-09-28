@@ -3,7 +3,7 @@ from gtts import gTTS
 import os
 import re
 
-csv_in = 'PT 8-23.csv'
+csv_in = 'PT 9-27 Fix.csv'
 csv_out = 'words.csv'
 filtered_csv = 'filtered.csv'
 en_folder = r'C:\Users\Mac\AppData\Roaming\Anki2\Mac\collection.media'
@@ -58,7 +58,7 @@ pt_exists = {f.rsplit("_pt.mp3", 1)[0] for f in os.listdir(pt_folder) if f.endsw
 # Generate gTTS list based on cleaned words for audio generation
 gTTS_list = [
     (remove_parentheses(en_word), remove_parentheses(pt_word), en_word, pt_word)
-    for en_word, pt_word in new_pairs
+    for en_word, pt_word in all_pairs
     if remove_parentheses(en_word) not in en_exists or remove_parentheses(pt_word) not in pt_exists
 ]
 

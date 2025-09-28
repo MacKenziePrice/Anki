@@ -4,9 +4,8 @@ import os
 import random
 import re
 import time
-
 from google.cloud import texttospeech
-# from gtts import gTTS
+from gtts import gTTS
 
 batch_size = 10
 list_size = 100
@@ -17,8 +16,8 @@ pt_folder = 'PT_'
 
 client = openai.OpenAI()
 
-def clean_word(word): # Remove any text within parentheses, 'to ' prefix, strip any excess whitespace (including whitespace left after removing parentheses)
-    word = word.strip()
+def clean_word(word):
+    word = word.strip() # Strip any excess whitespace (including whitespace left after removing parentheses)
     word_no_parens = re.sub(r'\s*\([^)]*\)\s*', ' ', word) # Remove text within parentheses and the parentheses themselves
 
     if word_no_parens.lower().startswith('to '):
@@ -27,36 +26,37 @@ def clean_word(word): # Remove any text within parentheses, 'to ' prefix, strip 
     
     return word_no_parens
 
-def generate_audio(text, file, language_code, voice_name, pitch, speaking_rate):
-    # tts = gTTS(text, lang=lang)
-    # tts.save(file)
-    client = texttospeech.TextToSpeechClient()
-    # lang_map = { "en": "en-US", "pt": "pt-BR" }
+def generate_audio(text, file, lang, voice_name = None, pitch = 0, speaking_rate = 1.0): # Generates audio using gTTS for English and Google Cloud TTS for Portuguese
+    if lang == 'en': # Use gTTS for English
+        print(f"Generating EN audio with gTTS for: '{text}'")
+        try:
+            tts = gTTS(text = text, lang='en')
+            tts.save(file)
+        except Exception as e:
+            print(f"Error generating gTTS audio for {file}: {e}")
 
-    synthesis_input = texttospeech.SynthesisInput(text = text)
-    
-    voice = texttospeech.VoiceSelectionParams(language_code = language_code, name = voice_name)
+    else: # Use Google Cloud TTS for Portuguese
+        print(f"Generating PT audio with Google Cloud TTS for: '{text}'")
+        try:
+            client = texttospeech.TextToSpeechClient()
+            synthesis_input = texttospeech.SynthesisInput(text = text)
+            lang_code_map = {'pt': 'pt-BR'} # Determine language code for Google Cloud TTS
+            language_code = lang_code_map.get(lang, lang) # Default to lang if not in map
+            voice = texttospeech.VoiceSelectionParams(language_code = language_code, name = voice_name)
+            audio_config = texttospeech.AudioConfig(audio_encoding = texttospeech.AudioEncoding.MP3, pitch = pitch, speaking_rate = speaking_rate)
+            response = client.synthesize_speech(input = synthesis_input, voice = voice, audio_config = audio_config)
 
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding = texttospeech.AudioEncoding.MP3,
-        pitch = pitch,
-        speaking_rate = speaking_rate
-    )
-
-    response = client.synthesize_speech(
-        input = synthesis_input,
-        voice = voice,
-        audio_config = audio_config
-    )
-
-    with open(file, "wb") as out:
-        out.write(response.audio_content)
+            with open(file, "wb") as out:
+                out.write(response.audio_content)
+        except Exception as e:
+            print(f"Error generating Google Cloud TTS audio for {file}: {e}")
 
 def generate_and_parse_sentences(words):
     cleaned_words = [w.strip() for w in words]
     join_words = ", ".join(cleaned_words)
     
-    prompt = f"""You are a helpful assistant that generates language-learning sentences.
+    prompt = f"""
+    You are a helpful assistant that generates language-learning sentences.
     Your task is to generate one simple sentence for each of the following words: {join_words}.
 
     Follow these rules precisely:
@@ -75,33 +75,33 @@ def generate_and_parse_sentences(words):
     2. WORD: cat
     EN: The cat is sleeping.
     PT: O gato está dormindo."""
-
-    response = client.chat.completions.create(
-        model = "gpt-4o",
-        messages = [{"role": "user", "content": prompt}]
-    )
-
-    text = response.choices[0].message.content.strip()
-    word_sentence_pairs = {} # Process the text to extract word-sentence pairs
     
-    entries = re.split(r'\n\s*\d+\.\s*', '\n' + text) # Split by numbered entries (1, 2, etc.)
-    if entries and not entries[0].strip(): # Remove empty first entry if present
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    text = response.choices[0].message.content.strip()
+    word_sentence_pairs = {}
+    
+    # Split into entries
+    entries = re.split(r'\n\s*\d+\.\s*', '\n' + text)
+    if entries and not entries[0].strip():
         entries = entries[1:]
     
     for entry in entries:
-        lines = entry.strip().split('\n')
-        if len(lines) >= 3:      
-            word_match = re.match(r'WORD:\s*(.*)', lines[0]) # Extract the original word
+        lines = [line.strip() for line in entry.strip().split('\n') if line.strip()]
+        if len(lines) >= 3:
+            word_match = re.match(r'WORD:\s*(.*)', lines[0], re.IGNORECASE)
             if word_match:
                 original_word = word_match.group(1).strip()
                 en_sentence = None
                 pt_sentence = None
                 
                 for line in lines[1:]:
-                    if line.startswith('EN:'):
-                        en_sentence = line[3:].strip()
-                    elif line.startswith('PT:'):
-                        pt_sentence = line[3:].strip()
+                    if re.match(r'^\s*EN\s*:', line, re.IGNORECASE):
+                        en_sentence = line.split(":", 1)[1].strip()
+                    elif re.match(r'^\s*PT\s*:', line, re.IGNORECASE):
+                        pt_sentence = line.split(":", 1)[1].strip()
                 
                 if original_word and en_sentence and pt_sentence:
                     word_sentence_pairs[original_word.lower()] = (en_sentence, pt_sentence)
@@ -114,16 +114,7 @@ def generate_and_parse_sentences(words):
         if word_lower in word_sentence_pairs:
             found_pairs.append((word, word_sentence_pairs[word_lower]))
         else:
-            # Check if the word appears in any sentence even if not explicitly labeled
-            found = False
-            for _, (en_sent, pt_sent) in word_sentence_pairs.items():
-                if word_in_sentence(word, en_sent):
-                    found_pairs.append((word, (en_sent, pt_sent)))
-                    found = True
-                    break
-            
-            if not found:
-                missing_words.append(word)
+            missing_words.append(word)
     
     return found_pairs, missing_words
 
@@ -207,15 +198,10 @@ with open(csv_out, "w", encoding="utf-8", newline="") as outfile:
             en_audio = os.path.join(en_folder, f"{cleaned_word_en}__en.mp3") # Fix this
             pt_audio = os.path.join(pt_folder, f"{word_pt}__pt.mp3")
 
-            print(f"Making EN audio for '{cleaned_word_en}': '{en_sentence}' -> {en_audio}")
-            print(f"Making PT audio for '{word_pt}': '{pt_sentence}' -> {pt_audio}")
-        
-            # generate_audio(en_sentence, en_audio, lang="en")
-            # generate_audio(pt_sentence, pt_audio, lang="pt")
-
-            generate_audio(en_sentence, en_audio, language_code = "en-US", voice_name = "en-US-Chirp3-HD-Schedar", pitch = 0, speaking_rate = 1)
-            generate_audio(pt_sentence, pt_audio, language_code = "pt-BR", voice_name = "pt-BR-Chirp3-HD-Achernar", pitch = 0, speaking_rate = 0.95)
-
+            print(f"'{cleaned_word_en}': '{en_sentence}' -> {en_audio}")
+            generate_audio(en_sentence, en_audio, lang = 'en') # Use gTTS for English
+            print(f"'{word_pt}': '{pt_sentence}' -> {pt_audio}")
+            generate_audio(pt_sentence, pt_audio, lang = "pt-BR", voice_name = "pt-BR-Chirp3-HD-Achernar", pitch = 0, speaking_rate = 0.95) # Use Google Cloud TTS for Portuguese
             front = f"{en_sentence}<br>[sound:{os.path.basename(en_audio)}]"
             back = f"{pt_sentence}<br>[sound:{os.path.basename(pt_audio)}]"
             writer.writerow([front, back])
@@ -225,5 +211,4 @@ with open(csv_out, "w", encoding="utf-8", newline="") as outfile:
             if count >= list_size: # Stop after processing X words
                 break
 
-print("\n" + "="*25 + " SCRIPT FINISHED " + "="*25)
 print(f"Successfully wrote {count} sentence pairs to the output file '{csv_out}'.")

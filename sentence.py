@@ -37,7 +37,7 @@ def generate_and_parse_sentences(words):
     join_words = ", ".join(cleaned_words)
     
     prompt = f"""You are a helpful assistant that generates language-learning sentences.
-    Your task is to generate one simple sentence for each of the following words: {join_words}.
+    Your task is to generate one very simple sentence for each of the following words: {join_words}.
 
     Follow these rules precisely:
     1. For each word, provide a numbered response.
